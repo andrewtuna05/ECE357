@@ -88,7 +88,7 @@ void print_long(const char *path, const struct stat *st) {
 
     // 10. symlink target
     if (S_ISLNK(st->st_mode)) {
-        char linkbuf[PATH_MAX];
+        char linkbuf[4096];
         ssize_t len = readlink(path, linkbuf, sizeof(linkbuf) - 1);
         if (len != -1) {
             linkbuf[len] = '\0';
@@ -143,7 +143,7 @@ int simplefind(const char *path, const char *pattern,bool verbose, bool xdev, de
     while ((de = readdir(dirp)) != NULL) {
         if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
 
-        char child[PATH_MAX];
+        char child[4096];
         snprintf(child, sizeof(child), "%s/%s", path, de->d_name);
 
         simplefind(child, pattern, verbose, xdev, root_dev);
