@@ -13,7 +13,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
-#include <sys/sysmacros.h>   // for major(), minor()
+#include <sys/sysmacros.h> 
 
 // For LS  
 static void format_mode(mode_t mode, char *out) {
@@ -44,7 +44,7 @@ static void format_mode(mode_t mode, char *out) {
     out[10] = '\0';
 }
 
-static void print_long(const char *path, const struct stat *st) {
+void print_long(const char *path, const struct stat *st) {
     // 1. inode
     printf("%lu ", (unsigned long) st->st_ino);
 
@@ -99,20 +99,20 @@ static void print_long(const char *path, const struct stat *st) {
     printf("\n");
 }
 
-static bool matches_pattern(const char *path, const char *pattern) {
-    if (!pattern) return true;
+bool matches_pattern(const char *path, const char *pattern) {
+    if (pattern == NULL) {
+        return true;
+    }
     const char *base = strrchr(path, '/');
-    base = (base ? base + 1 : path);
+    if (base != NULL) {
+        base = base + 1;   // now base points to the filename part
+    } else {
+        base = path;       // no slash in path, so use the whole string
+    }
     return fnmatch(pattern, base, 0) == 0;
 }
 
-// ---------------------- recursion ----------------------
-static int simplefind(const char *path,
-                      const char *pattern,
-                      bool verbose,
-                      bool xdev,
-                      dev_t root_dev)
-{
+int simplefind(const char *path, const char *pattern,bool verbose, bool xdev, dev_t root_dev){
     struct stat st;
     if (lstat(path, &st) == -1) {
         fprintf(stderr, "lstat(%s): %s\n", path, strerror(errno));
@@ -121,8 +121,10 @@ static int simplefind(const char *path,
 
     // Print if pattern matches
     if (matches_pattern(path, pattern)) {
-        if (verbose) print_long(path, &st);
-        else puts(path);
+        if (verbose){
+            print_long(path, &st);
+        }else 
+            puts(path);
     }
 
     // If not a directory, stop here
@@ -151,17 +153,20 @@ static int simplefind(const char *path,
     return 0;
 }
 
-// ---------------------- main ----------------------
 int main(int argc, char *argv[]) {
-    bool verbose = false, xdev = false;
+    bool verbose = false; 
+    bool xdev = false;
     const char *pattern = NULL;
 
     int opt;
     while ((opt = getopt(argc, argv, "lxn:")) != -1) {
         switch (opt) {
-            case 'l': verbose = true; break;
-            case 'x': xdev = true; break;
-            case 'n': pattern = optarg; break;
+            case 'l': verbose = true; 
+                break;
+            case 'x': xdev = true; 
+                break;
+            case 'n': pattern = optarg; 
+                break;
             default:
                 fprintf(stderr, "Usage: %s [-l] [-x] [-n pattern] [starting_path]\n", argv[0]);
                 return 1;
@@ -177,5 +182,9 @@ int main(int argc, char *argv[]) {
     }
 
     dev_t root_dev = st.st_dev;
-    return (simplefind(start, pattern, verbose, xdev, root_dev) == -1) ? 1 : 0;
+    if (simplefind(start, pattern, verbose, xdev, root_dev) == -1) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
