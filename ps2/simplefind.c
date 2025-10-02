@@ -15,7 +15,7 @@
 #include <time.h>
 #include <sys/sysmacros.h> 
 
-// For LS  
+// For ls options 
 static void format_mode(mode_t mode, char *out) {
     // File type
     if (S_ISREG(mode)) out[0] = '-';
@@ -45,10 +45,10 @@ static void format_mode(mode_t mode, char *out) {
 }
 
 void print_long(const char *path, const struct stat *st) {
-    // 1. inode
+    // 1. inode number
     printf("%lu ", (unsigned long) st->st_ino);
 
-    // 2. blocks (512-byte units → 1K blocks)
+    // 2. blocks (1K block size)
     printf("%ld ", (long)(st->st_blocks / 2));
 
     // 3. mode string
@@ -161,11 +161,14 @@ int main(int argc, char *argv[]) {
     int opt;
     while ((opt = getopt(argc, argv, "lxn:")) != -1) {
         switch (opt) {
-            case 'l': verbose = true; 
+            case 'l': 
+                verbose = true; 
                 break;
-            case 'x': xdev = true; 
+            case 'x': 
+                xdev = true; 
                 break;
-            case 'n': pattern = optarg; 
+            case 'n': 
+                pattern = optarg; 
                 break;
             default:
                 fprintf(stderr, "Usage: %s [-l] [-x] [-n pattern] [starting_path]\n", argv[0]);
