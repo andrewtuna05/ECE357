@@ -8,14 +8,14 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fnmatch.h>
-#include <limits.h>
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
 #include <sys/sysmacros.h> 
 
 //Friendly inode translation (holy this took forever to write out prof)
-static void format_mode(mode_t mode, char *out) {
+static void mode_translate(mode_t mode, char *out) {
+    //different filetypes and corresponding letter
     if (S_ISREG(mode)) {
         out[0] = '-';
     } else if (S_ISDIR(mode)) {
@@ -35,7 +35,7 @@ static void format_mode(mode_t mode, char *out) {
     }
 
     //File owner permissions
-    if (mode & S_IRUSR) {
+    if (mode & S_IRUSR) { //bitwise and
         out[1] = 'r';
     } else {
         out[1] = '-';
@@ -94,7 +94,7 @@ void long_print(const char *path, const struct stat *st) {
 
     //Inode Mode
     char mode[11]; //total 10 chars needed for mode +1 for null terminator
-    format_mode(st->st_mode, mode);
+    mode_translate(st->st_mode, mode);
 
     //Link Count
     int nlink = st->st_nlink;
@@ -125,7 +125,7 @@ void long_print(const char *path, const struct stat *st) {
         snprintf(sizebuf, sizeof(sizebuf), "%ld", st->st_size);
     }
 
-    //mtime of node - thanks zidane for the time syntax
+    //mtime of node (local timezone)
     char time[64];
     struct tm *local_time = localtime(&st->st_mtime);
     strftime(time, sizeof(time), "%b %e %H:%M", local_time);
