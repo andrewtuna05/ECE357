@@ -34,7 +34,7 @@ static void mode_translate(mode_t mode, char *output) {
         output[0] = '?';
     }
 
-    //File owner permissions (this might be dumb but its simple)
+    //File owner permissions (this might be a dumb implementation but its simple)
     //bitwise AND for mask st_mode with octal constants to check permissions
     if (mode & S_IRUSR) { 
         output[1] = 'r';
@@ -166,7 +166,7 @@ bool match_pattern(const char *path, const char *pattern) {
 int simplefind(const char *path, const char *pattern, bool verbose, bool xdev, dev_t root_dev){
     struct stat st;
     if (lstat(path, &st) == -1) {
-        fprintf(stderr, "Failed to stat entry at '%s' while scanning: %s\n", path, strerror(errno));
+        fprintf(stderr, "Cannot stat entry at '%s' while scanning: %s\n", path, strerror(errno));
         return -1;
     }
 
