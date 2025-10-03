@@ -22,10 +22,10 @@ static void mode_translate(mode_t mode, char *output) {
         output[0] = 'd';
     } else if (S_ISLNK(mode)) {
         output[0] = 'l';
-    } else if (S_ISCHR(mode)) {
-        output[0] = 'c';
     } else if (S_ISBLK(mode)) {
         output[0] = 'b';
+    } else if (S_ISCHR(mode)) {
+        output[0] = 'c';
     } else if (S_ISSOCK(mode)) {
         output[0] = 's';
     } else if (S_ISFIFO(mode)) {
@@ -34,53 +34,35 @@ static void mode_translate(mode_t mode, char *output) {
         output[0] = '?';
     }
 
-    //File owner permissions (this might be a dumb implementation but its simple)
-    //bitwise AND for mask st_mode with octal constants to check permissions
-    if (mode & S_IRUSR) { 
-        output[1] = 'r';
-    } else {
+    //default all permissions, clear if not set
+    //File owner permissions 
+    if (!(mode & S_IRUSR)) { 
         output[1] = '-';
-    }
-    if (mode & S_IWUSR) {
-        output[2] = 'w';
-    } else {
+    }    
+    if (!(mode & S_IWUSR)) {
         output[2] = '-';
-    }
-    if (mode & S_IXUSR) {
-        output[3] = 'x';
-    } else {
+    }    
+    if (!(mode & S_IXUSR)) {
         output[3] = '-';
-    }
+    }    
     //Group permissions
-    if (mode & S_IRGRP) {
-        output[4] = 'r';
-    } else {
+    if (!(mode & S_IRGRP)) {
         output[4] = '-';
     }
-    if (mode & S_IWGRP) {
-        output[5] = 'w';
-    } else {
+    if (!(mode & S_IWGRP)) {
         output[5] = '-';
     }
-    if (mode & S_IXGRP) {
-        output[6] = 'x';
-    } else {
+    if (!(mode & S_IXGRP)) {
         output[6] = '-';
-    }
+    }    
     //Other permissions
-    if (mode & S_IROTH) {
-        output[7] = 'r';
-    } else {
+    if (!(mode & S_IROTH)) {
         output[7] = '-';
     }
-    if (mode & S_IWOTH) {
-        output[8] = 'w';
-    } else {
+    if (!(mode & S_IWOTH)) {
         output[8] = '-';
     }
-    if (mode & S_IXOTH) {
-        output[9] = 'x';
-    } else {
+    if (!(mode & S_IXOTH)) {
         output[9] = '-';
     }
     output[10] = '\0';  //ends with null terminator
@@ -93,8 +75,8 @@ void long_print(const char *path, const struct stat *st) {
     //Blocks (1K block size)
     int block = st->st_blocks / 2;
 
-    //Inode Mode
-    char mode[11]; //10 chars needed for mode +1 for null terminator (0 to 10 = 11 spaces)
+    //Inode Mode - default all permissions
+    char mode[11] = "-rwxrwxrwx"; //10 chars needed for mode +1 for null terminator (0 to 10 = 11 spaces) 
     mode_translate(st->st_mode, mode);
 
     //Link Count
@@ -136,10 +118,9 @@ void long_print(const char *path, const struct stat *st) {
     if (S_ISLNK(st->st_mode)) {
         ssize_t len = readlink(path, link, sizeof(link) - 1);
         if (len == -1) {
-            fprintf(stderr, "Cannot resolve symlink '%s': %s\n", path, strerror(errno));
+            fprintf(stderr, "Cannot read symlink '%s': %s\n", path, strerror(errno));
         }else{
             link[len] = '\0';
-            printf(" -> %s", link);
         }  
     }
 
@@ -158,7 +139,7 @@ bool match_pattern(const char *path, const char *pattern) {
     if (base != NULL) {
         base = base + 1; //now base points to the filename part
     } else {
-        base = path; //no slash in path so use the whole string for file
+        base = path; //no slash in path so use whole path as filename
     }
     return fnmatch(pattern, base, 0) == 0; //fnmatch the goat!
 }
@@ -189,27 +170,27 @@ int simplefind(const char *path, const char *pattern, bool verbose, bool xdev, d
     }
 
     //Open directory for reading
-    DIR *d = opendir(path);
-    if (d == NULL) {
+    DIR *directory = opendir(path);
+    if (directory == NULL) {
         fprintf(stderr, "Cannot open directory %s, skipping! %s\n", path, strerror(errno));
         return 0;
     }
 
-    struct dirent *de;
-    while ((de = readdir(d)) != NULL) {
+    struct dirent *entry;
+    while ((entry = readdir(directory)) != NULL) {
 
         //skip current self and parent directories
-        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0){ 
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){ 
             continue;
         }
 
         char tmp_path[4096]; //append each iteration to path 
-        snprintf(tmp_path, sizeof(tmp_path), "%s/%s", path, de->d_name);
+        snprintf(tmp_path, sizeof(tmp_path), "%s/%s", path, entry->d_name);
 
         simplefind(tmp_path, pattern, verbose, xdev, root_dev);
     }
 
-    closedir(d);
+    closedir(directory);
     return 0;
 }
 
@@ -246,12 +227,12 @@ int main(int argc, char *argv[]) {
     }
 
     struct stat st;
-    dev_t root_dev = st.st_dev;
 
     if (lstat(start, &st) == -1) {
             fprintf(stderr, "Invalid starting path '%s': %s\n", start, strerror(errno));
         return 1;
     }
 
+    dev_t root_dev = st.st_dev;
     return (simplefind(start, pattern, verbose, xdev, root_dev) == -1);
 }
