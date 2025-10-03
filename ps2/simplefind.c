@@ -13,76 +13,77 @@
 #include <time.h>
 #include <sys/sysmacros.h> 
 
-//Friendly inode translation (holy this took forever to write out prof)
-static void mode_translate(mode_t mode, char *out) {
+//Friendly inode translation to human letters  (holy this took forever to write out prof)
+static void mode_translate(mode_t mode, char *output) {
     //different filetypes and corresponding letter
     if (S_ISREG(mode)) {
-        out[0] = '-';
+        output[0] = '-';
     } else if (S_ISDIR(mode)) {
-        out[0] = 'd';
+        output[0] = 'd';
     } else if (S_ISLNK(mode)) {
-        out[0] = 'l';
+        output[0] = 'l';
     } else if (S_ISCHR(mode)) {
-        out[0] = 'c';
+        output[0] = 'c';
     } else if (S_ISBLK(mode)) {
-        out[0] = 'b';
+        output[0] = 'b';
     } else if (S_ISSOCK(mode)) {
-        out[0] = 's';
+        output[0] = 's';
     } else if (S_ISFIFO(mode)) {
-        out[0] = 'p';
+        output[0] = 'p';
     } else {
-        out[0] = '?';
+        output[0] = '?';
     }
 
-    //File owner permissions
-    if (mode & S_IRUSR) { //bitwise and
-        out[1] = 'r';
+    //File owner permissions (this might be dumb but its simple)
+    //bitwise AND for mask st_mode with octal constants to check permissions
+    if (mode & S_IRUSR) { 
+        output[1] = 'r';
     } else {
-        out[1] = '-';
+        output[1] = '-';
     }
     if (mode & S_IWUSR) {
-        out[2] = 'w';
+        output[2] = 'w';
     } else {
-        out[2] = '-';
+        output[2] = '-';
     }
     if (mode & S_IXUSR) {
-        out[3] = 'x';
+        output[3] = 'x';
     } else {
-        out[3] = '-';
+        output[3] = '-';
     }
     //Group permissions
     if (mode & S_IRGRP) {
-        out[4] = 'r';
+        output[4] = 'r';
     } else {
-        out[4] = '-';
+        output[4] = '-';
     }
     if (mode & S_IWGRP) {
-        out[5] = 'w';
+        output[5] = 'w';
     } else {
-        out[5] = '-';
+        output[5] = '-';
     }
     if (mode & S_IXGRP) {
-        out[6] = 'x';
+        output[6] = 'x';
     } else {
-        out[6] = '-';
+        output[6] = '-';
     }
     //Other permissions
     if (mode & S_IROTH) {
-        out[7] = 'r';
+        output[7] = 'r';
     } else {
-        out[7] = '-';
+        output[7] = '-';
     }
     if (mode & S_IWOTH) {
-        out[8] = 'w';
+        output[8] = 'w';
     } else {
-        out[8] = '-';
+        output[8] = '-';
     }
     if (mode & S_IXOTH) {
-        out[9] = 'x';
+        output[9] = 'x';
     } else {
-        out[9] = '-';
+        output[9] = '-';
     }
-    out[10] = '\0';
+    output[10] = '\0';  //ends with null terminator
 }
 
 void long_print(const char *path, const struct stat *st) {
@@ -93,7 +94,7 @@ void long_print(const char *path, const struct stat *st) {
     int block = st->st_blocks / 2;
 
     //Inode Mode
-    char mode[11]; //total 10 chars needed for mode +1 for null terminator
+    char mode[11]; //10 chars needed for mode +1 for null terminator (0 to 10 = 11 spaces)
     mode_translate(st->st_mode, mode);
 
     //Link Count
