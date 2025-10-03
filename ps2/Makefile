@@ -1,10 +1,11 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2
-TARGET = simplefind
-SRC = simplefind.c
+CFLAGS = -Wall -Wextra -g -D_XOPEN_SOURCE=700
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
+simplefind: simplefind.o
+	$(CC) $(CFLAGS) -o simplefind simplefind.o
+
+simplefind.o: simplefind.c
+	$(CC) $(CFLAGS) -c simplefind.c
 
 clean:
-	rm -f $(TARGET)
+	rm -f simplefind simplefind.o

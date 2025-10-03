@@ -1,4 +1,3 @@
-#define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -15,149 +14,210 @@
 #include <time.h>
 #include <sys/sysmacros.h> 
 
-// For ls options 
+//Friendly inode translation (holy this took forever to write out prof)
 static void format_mode(mode_t mode, char *out) {
-    // File type
-    if (S_ISREG(mode)) out[0] = '-';
-    else if (S_ISDIR(mode)) out[0] = 'd';
-    else if (S_ISLNK(mode)) out[0] = 'l';
-    else if (S_ISCHR(mode)) out[0] = 'c';
-    else if (S_ISBLK(mode)) out[0] = 'b';
-    else if (S_ISSOCK(mode)) out[0] = 's';
-    else if (S_ISFIFO(mode)) out[0] = 'p';
-    else out[0] = '?';
+    if (S_ISREG(mode)) {
+        out[0] = '-';
+    } else if (S_ISDIR(mode)) {
+        out[0] = 'd';
+    } else if (S_ISLNK(mode)) {
+        out[0] = 'l';
+    } else if (S_ISCHR(mode)) {
+        out[0] = 'c';
+    } else if (S_ISBLK(mode)) {
+        out[0] = 'b';
+    } else if (S_ISSOCK(mode)) {
+        out[0] = 's';
+    } else if (S_ISFIFO(mode)) {
+        out[0] = 'p';
+    } else {
+        out[0] = '?';
+    }
 
-    // Owner permissions
-    out[1] = (mode & S_IRUSR) ? 'r' : '-';
-    out[2] = (mode & S_IWUSR) ? 'w' : '-';
-    out[3] = (mode & S_IXUSR) ? 'x' : '-';
-
-    // Group permissions
-    out[4] = (mode & S_IRGRP) ? 'r' : '-';
-    out[5] = (mode & S_IWGRP) ? 'w' : '-';
-    out[6] = (mode & S_IXGRP) ? 'x' : '-';
-
-    // Other permissions
-    out[7] = (mode & S_IROTH) ? 'r' : '-';
-    out[8] = (mode & S_IWOTH) ? 'w' : '-';
-    out[9] = (mode & S_IXOTH) ? 'x' : '-';
+    //File owner permissions
+    if (mode & S_IRUSR) {
+        out[1] = 'r';
+    } else {
+        out[1] = '-';
+    }
+    if (mode & S_IWUSR) {
+        out[2] = 'w';
+    } else {
+        out[2] = '-';
+    }
+    if (mode & S_IXUSR) {
+        out[3] = 'x';
+    } else {
+        out[3] = '-';
+    }
+    //Group permissions
+    if (mode & S_IRGRP) {
+        out[4] = 'r';
+    } else {
+        out[4] = '-';
+    }
+    if (mode & S_IWGRP) {
+        out[5] = 'w';
+    } else {
+        out[5] = '-';
+    }
+    if (mode & S_IXGRP) {
+        out[6] = 'x';
+    } else {
+        out[6] = '-';
+    }
+    //Other permissions
+    if (mode & S_IROTH) {
+        out[7] = 'r';
+    } else {
+        out[7] = '-';
+    }
+    if (mode & S_IWOTH) {
+        out[8] = 'w';
+    } else {
+        out[8] = '-';
+    }
+    if (mode & S_IXOTH) {
+        out[9] = 'x';
+    } else {
+        out[9] = '-';
+    }
     out[10] = '\0';
 }
 
-void print_long(const char *path, const struct stat *st) {
-    // 1. inode number
-    printf("%lu ", (unsigned long) st->st_ino);
+void long_print(const char *path, const struct stat *st) {
+    //Inode Number
+    int i_num = st->st_ino;
 
-    // 2. blocks (1K block size)
-    printf("%ld ", (long)(st->st_blocks / 2));
+    //Blocks (1K block size)
+    int block = st->st_blocks / 2;
 
-    // 3. mode string
-    char modebuf[11];
-    format_mode(st->st_mode, modebuf);
-    printf("%s ", modebuf);
+    //Inode Mode
+    char mode[11]; //total 10 chars needed for mode +1 for null terminator
+    format_mode(st->st_mode, mode);
 
-    // 4. link count
-    printf("%lu ", (unsigned long) st->st_nlink);
-
-    // 5. owner name or uid
+    //Link Count
+    int nlink = st->st_nlink;
+    
+    //Owner of node -- cool snprintf thanks aidan!
+    char owner[64];
     struct passwd *pw = getpwuid(st->st_uid);
-    if (pw) printf("%s ", pw->pw_name);
-    else printf("%u ", st->st_uid);
-
-    // 6. group name or gid
-    struct group *gr = getgrgid(st->st_gid);
-    if (gr) printf("%s ", gr->gr_name);
-    else printf("%u ", st->st_gid);
-
-    // 7. size or device major,minor
-    if (S_ISCHR(st->st_mode) || S_ISBLK(st->st_mode)) {
-        printf("%d,%d ", major(st->st_rdev), minor(st->st_rdev));
+    if (pw != NULL) {
+        snprintf(owner, sizeof(owner), "%s", pw->pw_name);
     } else {
-        printf("%lld ", (long long) st->st_size);
+        snprintf(owner, sizeof(owner), "%u", st->st_uid);
     }
 
-    // 8. mtime
-    char timebuf[64];
-    struct tm lt;
-    localtime_r(&st->st_mtime, &lt);
-    strftime(timebuf, sizeof(timebuf), "%b %e %H:%M", &lt);
-    printf("%s ", timebuf);
+    //Group 
+    char group[64];
+    struct group *gr = getgrgid(st->st_gid);
+    if (gr != NULL) {
+        snprintf(group, sizeof(group), "%s", gr->gr_name);
+    } else {
+        snprintf(group, sizeof(group), "%u", st->st_gid);
+    }
 
-    // 9. path
-    printf("%s", path);
+    //Size of node - check if char device or block device
+    char sizebuf[64];
+    if (S_ISCHR(st->st_mode) || S_ISBLK(st->st_mode)) {
+        snprintf(sizebuf, sizeof(sizebuf), "%d,%d", major(st->st_rdev), minor(st->st_rdev));
+    } else {
+        snprintf(sizebuf, sizeof(sizebuf), "%ld", st->st_size);
+    }
 
-    // 10. symlink target
+    //mtime of node - thanks zidane for the time syntax
+    char time[64];
+    struct tm *local_time = localtime(&st->st_mtime);
+    strftime(time, sizeof(time), "%b %e %H:%M", local_time);
+
+    //Symlink
+    char link[4096];
     if (S_ISLNK(st->st_mode)) {
-        char linkbuf[4096];
-        ssize_t len = readlink(path, linkbuf, sizeof(linkbuf) - 1);
-        if (len != -1) {
-            linkbuf[len] = '\0';
-            printf(" -> %s", linkbuf);
-        }
+        ssize_t len = readlink(path, link, sizeof(link) - 1);
+        if (len == -1) {
+            fprintf(stderr, "Cannot resolve symlink '%s': %s\n", path, strerror(errno));
+        }else{
+            link[len] = '\0';
+            printf(" -> %s", link);
+        }  
     }
 
-    printf("\n");
+    if (S_ISLNK(st->st_mode) && link[0] != '\0') { //if symlink, use this print 
+    printf("%d %d %s %d %s %s %s %s %s -> %s\n", i_num, block, mode, nlink, owner, group, sizebuf, time, path, link);
+    } else {
+        printf("%d %d %s %d %s %s %s %s %s\n", i_num, block, mode, nlink, owner, group, sizebuf, time, path);
+    }
 }
 
-bool matches_pattern(const char *path, const char *pattern) {
+bool match_pattern(const char *path, const char *pattern) {
     if (pattern == NULL) {
         return true;
     }
-    const char *base = strrchr(path, '/');
+    const char *base = strrchr(path, '/'); //isolate filename
     if (base != NULL) {
-        base = base + 1;   // now base points to the filename part
+        base = base + 1; //now base points to the filename part
     } else {
-        base = path;       // no slash in path, so use the whole string
+        base = path; //no slash in path so use the whole string for file
     }
-    return fnmatch(pattern, base, 0) == 0;
+    return fnmatch(pattern, base, 0) == 0; //fnmatch the goat!
 }
 
-int simplefind(const char *path, const char *pattern,bool verbose, bool xdev, dev_t root_dev){
+int simplefind(const char *path, const char *pattern, bool verbose, bool xdev, dev_t root_dev){
     struct stat st;
     if (lstat(path, &st) == -1) {
-        fprintf(stderr, "lstat(%s): %s\n", path, strerror(errno));
+        fprintf(stderr, "Failed to stat entry at '%s' while scanning: %s\n", path, strerror(errno));
         return -1;
     }
 
-    // Print if pattern matches
-    if (matches_pattern(path, pattern)) {
+    //If pattern matches, then print requested verbose or path
+    if (match_pattern(path, pattern)) {
         if (verbose){
-            print_long(path, &st);
+            long_print(path, &st);
         }else 
             puts(path);
     }
 
-    // If not a directory, stop here
-    if (!S_ISDIR(st.st_mode)) return 0;
+    //Check if st is directory or file (then stop)
+    if (!S_ISDIR(st.st_mode)){
+        return 0;
+    }
 
-    // Enforce -x
-    if (xdev && st.st_dev != root_dev) return 0;
+    //Enforce -x flag
+    if (xdev && (st.st_dev != root_dev)){
+        return 0;
+    }
 
-    DIR *dirp = opendir(path);
-    if (!dirp) {
-        fprintf(stderr, "opendir(%s): %s\n", path, strerror(errno));
+    //Open directory for reading
+    DIR *d = opendir(path);
+    if (d == NULL) {
+        fprintf(stderr, "Cannot open directory %s, skipping! %s\n", path, strerror(errno));
         return 0;
     }
 
     struct dirent *de;
-    while ((de = readdir(dirp)) != NULL) {
-        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
+    while ((de = readdir(d)) != NULL) {
 
-        char child[4096];
-        snprintf(child, sizeof(child), "%s/%s", path, de->d_name);
+        //skip current self and parent directories
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0){ 
+            continue;
+        }
 
-        simplefind(child, pattern, verbose, xdev, root_dev);
+        char tmp_path[4096]; //append each iteration to path 
+        snprintf(tmp_path, sizeof(tmp_path), "%s/%s", path, de->d_name);
+
+        simplefind(tmp_path, pattern, verbose, xdev, root_dev);
     }
 
-    closedir(dirp);
+    closedir(d);
     return 0;
 }
 
 int main(int argc, char *argv[]) {
-    bool verbose = false; 
-    bool xdev = false;
+    bool verbose = false; //long listing format
+    bool xdev = false; //x flag
     const char *pattern = NULL;
 
+    //argument parsing logic
     int opt;
     while ((opt = getopt(argc, argv, "lxn:")) != -1) {
         switch (opt) {
@@ -171,23 +231,26 @@ int main(int argc, char *argv[]) {
                 pattern = optarg; 
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-l] [-x] [-n pattern] [starting_path]\n", argv[0]);
+                fprintf(stderr, "To run: ./simplefind [-l] [-x] [-n pattern] [starting_path]\n"); //please run only this format otherwise funny stuff may happen
                 return 1;
         }
     }
 
-    const char *start = (optind < argc) ? argv[optind] : ".";
+    //Start path defaults to . if not specified
+    const char *start;
+    if (optind < argc) {
+        start = argv[optind];
+    } else {
+        start = ".";
+    }
 
     struct stat st;
+    dev_t root_dev = st.st_dev;
+
     if (lstat(start, &st) == -1) {
-        perror("lstat");
+            fprintf(stderr, "Invalid starting path '%s': %s\n", start, strerror(errno));
         return 1;
     }
 
-    dev_t root_dev = st.st_dev;
-    if (simplefind(start, pattern, verbose, xdev, root_dev) == -1) {
-        return 1;
-    } else {
-        return 0;
-    }
+    return (simplefind(start, pattern, verbose, xdev, root_dev) == -1);
 }
