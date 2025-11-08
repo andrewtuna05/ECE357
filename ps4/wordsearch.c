@@ -44,12 +44,6 @@ int main(int argc, char** argv){
 
         wordlist[dict_count] = strdup(buffer);
         dict_count++;
-
-        // Debugging note
-        if (dict_count > 500000) {
-            fprintf(stderr, "Warning: dictionary truncated at %d words\n", 500000);
-            break;
-        }
     }
     fclose(dict);
     fprintf(stderr, "Accepted %d words\n", dict_count);
