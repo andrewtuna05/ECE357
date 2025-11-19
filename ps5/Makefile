@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -g -D_XOPEN_SOURCE=700
 
 PROGS = bgrep
 
