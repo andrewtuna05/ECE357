@@ -10,40 +10,39 @@
 #include <setjmp.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <time.h>
 
 static sigjmp_buf env;
 char *current_file = NULL;
 
-void signal_handler() {
+void signal_handler(int sig) {
     write(STDERR_FILENO, "SIGBUS received while processing file ", 39);
     write(STDERR_FILENO, current_file, strlen(current_file));
     write(STDERR_FILENO, "\n", 1);
-
     siglongjmp(env, 1);
 }
 
-void scan_file(char *filename, char *pattern, unsigned long len, int context, bool *fatal_error, bool *global_match){
-
+void scan_file(char *filename, char *pattern, unsigned long len, int context, bool *sys_error, bool *global_match){
     int fd;
     struct stat st;
 
     // If stdin then report the error
     if (filename == NULL){
         fprintf(stderr, "stdin cannot be mmapped\n");
-        *fatal_error = true;
+        *sys_error = true;
         return;
     }
 
     fd = open(filename, O_RDONLY);
     if (fd < 0){
         fprintf(stderr, "Can't open %s for reading: %s\n", filename, strerror(errno));
-        *fatal_error = true;
+        *sys_error = true;
         return;
     }
 
     if (fstat(fd, &st) < 0){
         fprintf(stderr, "fstat failed on %s: %s\n", filename, strerror(errno));
-        *fatal_error = true;
+        *sys_error = true;
         close(fd);
         return;
     }
@@ -58,7 +57,7 @@ void scan_file(char *filename, char *pattern, unsigned long len, int context, bo
     unsigned char *addr = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (addr == MAP_FAILED){
         fprintf(stderr, "mmap failed on %s: %s", filename, strerror(errno));
-        *fatal_error = true;
+        *sys_error = true;
         close(fd);
         return;
     }
@@ -70,47 +69,55 @@ void scan_file(char *filename, char *pattern, unsigned long len, int context, bo
     if (sigsetjmp(env, 1) != 0) {
         munmap(addr, st.st_size);
         close(fd);
-        *fatal_error = true;
+        *sys_error = true;
         return;
     }
 
     // Pattern searching through file
     for (off_t i = 0; i + len <= st.st_size; i++){
-
         if (memcmp(addr + i, pattern, len) == 0){
            *global_match = true;
 
-            // compute context range
-            size_t start;
-            if (i >= context){
-                start = i - context;
+            if (context == 0){
+                // print filename + offset
+                printf("%s:%ld\n", filename, (long)i); // cast into long insead of off_t (refer to previous source down below)
+
             }else{
-                start = 0;
-            }
+                // compute context range
+                size_t start;
+                if (i >= context){
+                    start = i - context;
+                }else{
+                    start = 0;
+                }
 
-            size_t end = i + len + context;
-            if (end > st.st_size){
-                end = st.st_size;
-            }
+                size_t end = i + len + context;
+                if (end > st.st_size){
+                    end = st.st_size;
+                }
 
-            // print filename + offset
-            printf("%s:%ld ", filename, (long)i); // cast into long insead of off_t (refer to previous source down below)
+                printf("%s:%ld ", filename, (long)i); // cast into long insead of off_t (refer to previous source down below)
 
-            // ASCII
-            for (size_t j = start; j < end; j++){
-                unsigned char c = addr[j];
-                if (isprint(c))
-                    putchar(c);
-                else
-                    putchar('?');
-            }
-            putchar(' ');
+                // ASCII
+                for (size_t j = start; j < end; j++){
+                    unsigned char c = addr[j];
+                    if(isprint(c)){
+                        putchar(c);
+                        putchar(' ');
+                    }
+                    else{
+                        putchar('?');
+                        putchar(' ');
+                    }
+                }
+                putchar('\t');
 
-            // HEX
-            for (size_t j = start; j < end; j++){
-                printf("%02x", addr[j]);
-            }
-            putchar('\n');
+                // HEX
+                for (size_t j = start; j < end; j++){
+                    printf("%02x ", addr[j]);
+                }
+                putchar('\n');
+            }   
         }
     }
 
@@ -176,16 +183,15 @@ int main(int argc, char** argv){
     if(use_pattern == true){
         int p_fd = open(pattern_file, O_RDONLY);
         if (p_fd < 0) {
-            fprintf(stderr, "Can't open pattern file %s: %s\n",
-                    pattern_file, strerror(errno));
-            return 255;
+            fprintf(stderr, "Can't open pattern file %s: %s\n", pattern_file, strerror(errno));
+            return -1;
         }
 
         struct stat p_st;
         if (fstat(p_fd, &p_st) < 0) {
-            perror("fstat");
+            fprintf(stderr, "fstat failed on %s: %s\n", pattern_file, strerror(errno));
             close(p_fd);
-            return 255;
+            return -1;
         }
 
         len = p_st.st_size;
@@ -194,6 +200,7 @@ int main(int argc, char** argv){
             close(p_fd);
             return 1;
         }
+        
         pattern = malloc(len);
         read(p_fd, pattern, len);
         close(p_fd);
@@ -205,7 +212,7 @@ int main(int argc, char** argv){
         optind++;  // consume literal pattern
     }
     
-    bool fatal_error = false;
+    bool sys_error = false;
     bool global_match = false;
     bool use_stdin = false;
 
@@ -214,15 +221,15 @@ int main(int argc, char** argv){
     }
 
     if (use_stdin){
-        scan_file(NULL, pattern, len, context, &fatal_error, &global_match);
+        scan_file(NULL, pattern, len, context, &sys_error, &global_match);
     } else{
         for (int i = optind; i < argc; i++){
-            scan_file(argv[i], pattern, len, context, &fatal_error, &global_match);
+            scan_file(argv[i], pattern, len, context, &sys_error, &global_match);
         }
     }
 
-    if (fatal_error){
-        return 255;
+    if (sys_error){
+        return -1;
     }
 
     if (global_match){
