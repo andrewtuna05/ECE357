@@ -11,21 +11,21 @@
 #include <errno.h>
 #include <stdbool.h>
 
-static volatile sig_atomic_t got_sigbus = 0;
-static const char *current_filename = NULL;
+static sigjmp_buf env;
+char *current_file = NULL;
 
-void signal_handler(int sig) {
-    sigbus = true;
+void signal_handler() {
     write(STDERR_FILENO, "SIGBUS received while processing file ", 39);
-    write(STDERR_FILENO, current_filename, strlen(current_filename));
+    write(STDERR_FILENO, current_file, strlen(current_file));
     write(STDERR_FILENO, "\n", 1);
+
+    siglongjmp(env, 1);
 }
 
-void scan_file(char *filename, unsigned char *pattern, unsigned long len, int context, bool *fatal_error, bool *global_match){
+void scan_file(char *filename, char *pattern, unsigned long len, int context, bool *fatal_error, bool *global_match){
 
     int fd;
     struct stat st;
-    bool sigbus = false;
 
     // If stdin then report the error
     if (filename == NULL){
@@ -64,24 +64,18 @@ void scan_file(char *filename, unsigned char *pattern, unsigned long len, int co
     }
 
     // SIGBUS https://stackoverflow.com/questions/20755260/why-use-sigsetjmp-instead-of-setjmp-function-in-c
-    char *current_file = filename;
-    if (sigsetjmp(env, 1) != 0){
-        // came back from SIGBUS
+    current_file = filename;
+
+    // If SIGBUS occurred, skip and close out the file
+    if (sigsetjmp(env, 1) != 0) {
         munmap(addr, st.st_size);
         close(fd);
+        *fatal_error = true;
         return;
     }
 
     // Pattern searching through file
     for (off_t i = 0; i + len <= st.st_size; i++){
-
-        // First check if SIGBUS occurred
-        if (sigbus) {
-            munmap(addr, st.st_size);
-            close(fd);
-            *fatal_error = true;
-            return;
-        }
 
         if (memcmp(addr + i, pattern, len) == 0){
            *global_match = true;
@@ -93,10 +87,12 @@ void scan_file(char *filename, unsigned char *pattern, unsigned long len, int co
             }else{
                 start = 0;
             }
+
             size_t end = i + len + context;
             if (end > st.st_size){
                 end = st.st_size;
             }
+
             // print filename + offset
             printf("%s:%ld ", filename, (long)i); // cast into long insead of off_t (refer to previous source down below)
 
@@ -136,6 +132,14 @@ int main(int argc, char** argv){
         return 1;
     }
 
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    sigaction(SIGBUS, &sa, NULL);
+
     while ((opt = getopt(argc, argv, "pc:")) != -1) {
         switch (opt) {
             case 'c': 
@@ -163,14 +167,6 @@ int main(int argc, char** argv){
         fprintf(stderr, "Error: no search pattern provided\n");
         return 1;
     }
-
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = signal_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-
-    sigaction(SIGBUS, &sa, NULL);
 
     char *pattern = NULL;
     size_t len = 0; //www.reddit.com/r/C_Programming/comments/e4hro6/when_to_use_size_t/
@@ -204,7 +200,7 @@ int main(int argc, char** argv){
 
     // Case 2: Literal Pattern
     }else{
-        pattern = (unsigned char *)argv[optind]; // WTF here???
+        pattern = argv[optind];
         len = strlen((char*)pattern);
         optind++;  // consume literal pattern
     }
