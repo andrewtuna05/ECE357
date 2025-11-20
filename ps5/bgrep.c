@@ -11,6 +11,16 @@
 #include <errno.h>
 #include <stdbool.h>
 
+static volatile sig_atomic_t got_sigbus = 0;
+static const char *current_filename = NULL;
+
+void signal_handler(int sig) {
+    sigbus = true;
+    write(STDERR_FILENO, "SIGBUS received while processing file ", 39);
+    write(STDERR_FILENO, current_filename, strlen(current_filename));
+    write(STDERR_FILENO, "\n", 1);
+}
+
 void scan_file(char *filename, unsigned char *pattern, unsigned long len, int context, bool *fatal_error, bool *global_match){
 
     int fd;
@@ -21,27 +31,27 @@ void scan_file(char *filename, unsigned char *pattern, unsigned long len, int co
     if (filename == NULL){
         fprintf(stderr, "stdin cannot be mmapped\n");
         *fatal_error = true;
-        return 1;
+        return;
     }
 
     fd = open(filename, O_RDONLY);
     if (fd < 0){
         fprintf(stderr, "Can't open %s for reading: %s\n", filename, strerror(errno));
         *fatal_error = true;
-        return 255;
+        return;
     }
 
     if (fstat(fd, &st) < 0){
         fprintf(stderr, "fstat failed on %s: %s\n", filename, strerror(errno));
         *fatal_error = true;
         close(fd);
-        return 255;
+        return;
     }
 
     // If the file is empty
     if (st.st_size < len){
         close(fd);
-        return 0;
+        return;
     }
 
     //stackoverflow.com/questions/13642381/c-c-why-to-use-unsigned-char-for-binary-data?
@@ -53,7 +63,7 @@ void scan_file(char *filename, unsigned char *pattern, unsigned long len, int co
         return;
     }
 
-    // SIGBUS protection
+    // SIGBUS https://stackoverflow.com/questions/20755260/why-use-sigsetjmp-instead-of-setjmp-function-in-c
     char *current_file = filename;
     if (sigsetjmp(env, 1) != 0){
         // came back from SIGBUS
@@ -154,6 +164,14 @@ int main(int argc, char** argv){
         return 1;
     }
 
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    sigaction(SIGBUS, &sa, NULL);
+
     char *pattern = NULL;
     size_t len = 0; //www.reddit.com/r/C_Programming/comments/e4hro6/when_to_use_size_t/
 
@@ -180,21 +198,8 @@ int main(int argc, char** argv){
             close(p_fd);
             return 1;
         }
-
         pattern = malloc(len);
-        if (pattern == NULL){
-            perror("malloc");
-            close(p_fd);
-            return 255;
-        }
-
-        unsigned long n = read(p_fd, pattern, len);
-        if (n != len){
-            perror("read");
-            close(p_fd);
-            free(pattern);
-            return 255;
-        }
+        read(p_fd, pattern, len);
         close(p_fd);
 
     // Case 2: Literal Pattern
