@@ -21,7 +21,6 @@ void sem_wait(struct sem *s){
     sigemptyset(&newmask);
     sigaddset(&newmask, SIGUSR1);
     
-    
     while (1){
         // Block SIGUSR1
         sigprocmask(SIG_BLOCK, &newmask, &oldmask);
@@ -41,12 +40,6 @@ void sem_wait(struct sem *s){
             
             // Wait for SIGUSR1
             sigsuspend(&oldmask); // Atomically unblocks SIGUSR1
-        
-            // // Now sleep with SIGUSR1 unmasked. MAYBE THIS MIGHT WORK
-            // sigset_t suspendmask = oldmask;
-            // sigdelset(&suspendmask, SIGUSR1);
-
-            // sigsuspend(&suspendmask);
 
             sigprocmask(SIG_SETMASK, &oldmask, NULL);
         }
